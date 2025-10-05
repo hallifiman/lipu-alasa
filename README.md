@@ -24,3 +24,11 @@ sitelenselikiwenjuniko.ttf, sitelenselikiwenjuniko.woff, sitelenselikiwenjuniko.
 sitelenselikiwenasuki.ttf, sitelenselikiwenasuki.woff, sitelenselikiwenasuki.woff2
 ## Fairfax Pona HD
 FairFaxPonaHD.ttf, FairFaxPonaHD.woff, FairFaxPonaHD.woff2
+# Setup
+## Requirement(s)
+[Python](https://www.python.org/downloads/)
+## Steps
+1) Put the files from this directory into a folder.
+2) Run cmd in that directory.
+3) Run the `py -m http.server` command
+4) Go to this URL: http://localhost:8000/tan.html
