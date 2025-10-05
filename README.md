@@ -8,7 +8,7 @@ Essentially a directory of every applicable webpage.
 351 lipu pona posts
 
 6 lipu pona user pages
-# alasa.html
+## alasa.html
 The search page where results are served.
-# tan.html
+## tan.html
 The home page where users begin their alasa.
