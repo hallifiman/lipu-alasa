@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="tok">
+<head>
+<meta charset="UTF-8">
+<title>lipu alasa</title>
+<link rel="icon" type="image/x-icon" href="lipu lili.ico">
+<style>
+html { font-size: 200%; }
+input,button{ font-size: 75%; }
+@font-face { font-family: "sitelen seli kiwen juniko"; src: url("sitelenselikiwenjuniko.ttf") format("truetype"), url("sitelenselikiwenjuniko.woff") format("woff"), url("sitelenselikiwenjuniko.woff2") format("woff2"); font-display: swap; }
+@font-face { font-family: "sitelen seli kiwen asuki"; src: url("sitelenselikiwenasuki.ttf") format("truetype"), url("sitelenselikiwenasuki.woff") format("woff"), url("sitelenselikiwenasuki.woff2") format("woff2"); font-display: swap; }
+@font-face { font-family: "Fairfax Pona HD"; src: url("FairfaxPonaHD.ttf") format("truetype"), url("FairfaxPonaHD.woff") format("woff"), url("FairfaxPonaHD.woff2") format("woff2"); font-display: swap; }
+body { font-family: "sitelen seli kiwen juniko","sitelen seli kiwen asuki","Fairfax Pona HD",sans-serif; }
+#sewi { display: flex; align-items: center; gap: 10px; }
+button, input { font-family: "sitelen seli kiwen juniko","sitelen seli kiwen asuki","Fairfax Pona HD",sans-serif; }
+</style>
+</head>
+<body>
+<div id="sewi">
+	<a href="http://localhost:8000/tan.html">
+    <img src="lipu suli.png" width="45">
+	</a>
+    <input type="search" name="nimiAlasa" id="nimiAlasa">
+    <button id="searchBtn">󱥄󱤃</button>
+</div>
+
+<div id="lipu mute"></div>
+
+<script>
+async function main() {
+    const response = await fetch("lipu.json");
+    const articles = await response.json();
+    const container = document.getElementById("lipu mute");
+    const input = document.getElementById("nimiAlasa");
+    const button = document.getElementById("searchBtn");
+    const ignoreSymbols = [".", ",", "!", "?", ";", ":", "-", "_", "—", "(", ")", "[", "]", "{", "}", "'", "\"", "…", "¿"];
+
+    function cleanTextWord(word) {
+        const regex = new RegExp("[" + ignoreSymbols.map(s => "\\" + s).join("") + "]", "g");
+        return word.replace(regex, "").toLowerCase();
+    }
+
+    function cleanQueryWord(word) {
+        return word.toLowerCase();
+    }
+
+    function levenshtein(a, b) {
+        const dp = Array.from({length: a.length + 1}, () => Array(b.length + 1).fill(0));
+        for(let i=0;i<=a.length;i++) dp[i][0]=i;
+        for(let j=0;j<=b.length;j++) dp[0][j]=j;
+        for(let i=1;i<=a.length;i++){
+            for(let j=1;j<=b.length;j++){
+                if(a[i-1] === b[j-1]) dp[i][j] = dp[i-1][j-1];
+                else dp[i][j] = 1 + Math.min(dp[i-1][j], dp[i][j-1], dp[i-1][j-1]);
+            }
+        }
+        return dp[a.length][b.length];
+    }
+
+    function fuzzyWordMatch(queryWord, textWord) {
+        const w1 = cleanQueryWord(queryWord);
+        const w2 = cleanTextWord(textWord);
+        if (!w1 || !w2) return false;
+        const distance = levenshtein(w1, w2);
+        return distance <= 1;
+    }
+
+    function splitWord(word) {
+        const regex = new RegExp("^[" + ignoreSymbols.map(s => "\\" + s).join("") + "]*");
+        const prefixMatch = word.match(regex)[0];
+        const suffixRegex = new RegExp("[" + ignoreSymbols.map(s => "\\" + s).join("") + "]*$");
+        const suffixMatch = word.match(suffixRegex)[0];
+        const core = word.slice(prefixMatch.length, word.length - suffixMatch.length);
+        return { prefix: prefixMatch, core, suffix: suffixMatch };
+    }
+
+    function highlightWord(word, queryWords) {
+        const { prefix, core, suffix } = splitWord(word);
+        if (!core) return word;
+
+        for (const qw of queryWords) {
+            const cleanQ = cleanQueryWord(qw);
+            if (cleanTextWord(core) === cleanQ || fuzzyWordMatch(qw, core)) {
+                return prefix + `<b>${core}</b>` + suffix;
+            }
+        }
+        return word;
+    }
+
+    function scoreArticle(article, query) {
+        if (!query) return 0;
+        const text = (article.content).toLowerCase();
+        const cleanText = text.replace(/[.,!?;:()\[\]{}'"…¿]/g, "");
+        const textWords = cleanText.split(/\s+/).filter(Boolean);
+        const queryWords = query.toLowerCase().split(/\s+/).filter(Boolean);
+
+        let score = 0;
+        let hasRealMatch = false;
+
+        queryWords.forEach(qw => {
+            const cq = cleanQueryWord(qw);
+            if (textWords.some(tw => cleanTextWord(tw) === cq)) {
+                score += 8;
+                hasRealMatch = true;
+            } else if (textWords.some(tw => fuzzyWordMatch(qw, tw))) {
+                score += 3;
+                hasRealMatch = true;
+            }
+        });
+
+        if (!hasRealMatch) return 0;
+
+        const queryPattern = queryWords.map(q => cleanQueryWord(q)).join("[\\s.,!?;:()\\[\\]{}'\"]+");
+        const phraseRegex = new RegExp(queryPattern, "i");
+        if (phraseRegex.test(text)) score += 250;
+
+        if (article.title.toLowerCase().includes(query.toLowerCase())) score += 200;
+
+        if (queryWords.length > 1) {
+            let proximityScore = 0;
+
+            for (let q = 0; q < queryWords.length - 1; q++) {
+                const firstWord = cleanQueryWord(queryWords[q]);
+                const nextWord = cleanQueryWord(queryWords[q + 1]);
+
+                const firstIndexes = [];
+                const nextIndexes = [];
+
+                textWords.forEach((tw, i) => {
+                    const cw = cleanTextWord(tw);
+                    if (cw === firstWord) firstIndexes.push(i);
+                    if (cw === nextWord) nextIndexes.push(i);
+                });
+
+                let minDist = Infinity;
+                for (const i1 of firstIndexes) {
+                    for (const i2 of nextIndexes) {
+                        if (i2 > i1) minDist = Math.min(minDist, i2 - i1);
+                    }
+                }
+
+                if (minDist !== Infinity) {
+                    if (minDist === 1) proximityScore += 180;
+                    else if (minDist <= 3) proximityScore += 80;
+                    else if (minDist <= 6) proximityScore += 30;
+                }
+            }
+
+            score += proximityScore;
+        }
+
+        return score;
+    }
+
+    function makeSnippet(content, query) {
+        const words = content.split(/\s+/).filter(Boolean);
+        const queryWords = query.split(/\s+/).filter(Boolean);
+
+        let matchIndex = -1;
+        outer: for (let i = 0; i < words.length; i++) {
+            for (const qw of queryWords) {
+                if (cleanTextWord(words[i]) === cleanQueryWord(qw) || fuzzyWordMatch(qw, words[i])) {
+                    matchIndex = i;
+                    break outer;
+                }
+            }
+        }
+
+        if (matchIndex === -1) {
+            return words.slice(0, 9).join(" ") + (words.length > 9 ? " ..." : "");
+        }
+
+        const start = Math.max(0, matchIndex - 4);
+        const end = Math.min(words.length, matchIndex + 5);
+        let snippet = words.slice(start, end);
+        snippet = snippet.map(w => highlightWord(w, queryWords));
+
+        const prefix = start > 0 ? "... " : "";
+        const suffix = end < words.length ? " ..." : "";
+        return prefix + snippet.join(" ") + suffix;
+    }
+
+    function renderList(filter = "") {
+        container.innerHTML = "";
+        if (filter === "") {
+            const div = document.createElement("div");
+            div.innerHTML = `<p>󱥄󱤃󱤉󱥂</p>`;
+            container.appendChild(div);
+            return;
+        }
+
+        const scored = articles
+            .map(a => ({...a, score: scoreArticle(a, filter)}))
+            .filter(a => a.score > 0)
+            .sort((a, b) => b.score === a.score
+                ? a.title.localeCompare(b.title, 'en', { sensitivity: 'base' })
+                : b.score - a.score);
+
+        if (scored.length === 0) {
+            const div = document.createElement("div");
+            div.innerHTML = `<p>󱤪󱤧󱤬󱤂</p>`;
+            container.appendChild(div);
+            return;
+        }
+
+        scored.forEach(item => {
+            const div = document.createElement("div");
+            const snippet = makeSnippet(item.content, filter);
+            div.innerHTML = `
+                <a href="${item.url}">
+                    <h3 style="margin-bottom: 5px; font-weight: normal;">${item.title}</h3>
+                </a>
+                <p>${snippet}</p>
+            `;
+            container.appendChild(div);
+        });
+    }
+
+    const params = new URLSearchParams(window.location.search);
+    const initialQuery = params.get("search") || "";
+    if (initialQuery) {
+        input.value = initialQuery;
+        renderList(initialQuery);
+    } else {
+        renderList();
+    }
+
+    function doSearch() {
+        const val = input.value.trim();
+        const newUrl = window.location.pathname + (val ? `?search=${encodeURIComponent(val)}` : "");
+        window.history.replaceState(null, "", newUrl);
+        renderList(val);
+    }
+
+    button.addEventListener("click", doSearch);
+    input.addEventListener("keypress", e => { if(e.key === "Enter") doSearch(); });
+}
+main().catch(err => console.error("lipu nanpa li toki e ni:", err));
+</script>
+
+</body>
+</html>
